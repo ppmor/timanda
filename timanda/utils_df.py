@@ -1,14 +1,36 @@
-# import pandas as pd
 import allantools
+from astropy.time import Time
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from report import Report
 import uuid
-import os
+
+
+def mjd_to_datetime(mjd):
+    return Time(mjd, format='mjd').to_datetime()
 
 
 def noise_analysis_df(df, mjd='mjd', val='val'):
     return 0
+
+
+def resample_df(
+    df,
+    mjd='mjd',
+    period_str='5T',
+    method='mean',
+    mjd_shift=0,
+):
+    df['datetime'] = mjd_to_datetime(df[mjd])
+    df.set_index('datetime', inplace=True)
+    if method == 'mean':
+        df = df.resample(period_str).mean()
+    if method == 'first':
+        df = df.resample(period_str).first()
+    if mjd_shift != 0:
+        df[mjd] = df[mjd] + mjd_shift
+    return df
 
 
 def rm_wykres_files():
