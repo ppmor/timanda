@@ -2,6 +2,10 @@
 
 This document records all significant changes made to the "timanda" data analysis project. The purpose of this changelog is to inform users about new features, bug fixes, and modifications in each version.
 
+## [0.0.4] - 2023-12-22
+### Added
+- function 'rm3sigma_df'
+
 ## [0.0.3] - 2023-12-19
 ### Added
 - function `resample_df`

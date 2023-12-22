@@ -93,3 +93,13 @@ def add_df_to_rep(df, param, rep, text=None):
         rep.dodaj_tekst(text)
     plot_df(df, param, rep)
     plot_df_allan(df, param, rep)
+
+
+def rm3sigma_df(df, param='frac_freq'):
+    init_len = df.shape[0]
+    m = df[param].mean()
+    std = df[param].std()
+    df = df[abs(df[param]-m) < 3*std]
+    if init_len > df.shape[0]:
+        df = rm3sigma_df(df, param)
+    return df
