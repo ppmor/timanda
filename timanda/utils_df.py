@@ -5,6 +5,8 @@ import numpy as np
 import os
 from report import Report
 import uuid
+from scipy.stats import linregress
+import pandas as pd
 
 
 def mjd_to_datetime(mjd):
@@ -28,8 +30,11 @@ def resample_df(
         df = df.resample(period_str).mean()
     if method == 'first':
         df = df.resample(period_str).first()
+    if method == 'slope':
+        df = df.resample(period_str).apply(get_slope)
     if mjd_shift != 0:
         df[mjd] = df[mjd] + mjd_shift
+    df['mjd'] = df.index.map(lambda x: Time(x).mjd)
     return df
 
 
@@ -69,9 +74,13 @@ def plot_df(df, param, rep):
 def plot_df_allan(df, param, rep):
     t = np.power(10, np.arange(1, int(np.log10(50*24*60*60))+0.1, 0.1))
     data = df[param].to_numpy()
+    mjd_max = df['mjd'].max()
+    mjd_min = df['mjd'].min()
+    mjd_count = df['mjd'].count()
+    rate = 1 / ((mjd_max-mjd_min)*24*60*60 / mjd_count)
     (taus, adevs, errors, ns) = allantools.adev(
         data,
-        rate=1/300,
+        rate=rate,
         data_type='freq',
         taus=t
     )
@@ -103,3 +112,15 @@ def rm3sigma_df(df, param='frac_freq'):
     if init_len > df.shape[0]:
         df = rm3sigma_df(df, param)
     return df
+
+
+def get_slope(group):
+    if len(group) < 2:
+        return np.nan
+    seconds_since_epoch = (
+        (group.index - pd.Timestamp('1970-01-01')).total_seconds() * 1e9
+    )
+    slope, intercept, r_value, p_value, str_err = linregress(
+        seconds_since_epoch, group
+    )
+    return slope
