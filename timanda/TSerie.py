@@ -1,6 +1,8 @@
+from astropy.time import Time
 import decimal as dec  # TODO: remove after removing alphanorm
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 import pyqtgraph as pg
 import allantools as al
 from astropy.convolution import Gaussian1DKernel, convolve
@@ -375,7 +377,7 @@ class MTSerie:
         self.split()
 
     def __str__(self):
-        s = 'MTSerie:\n'
+        s = f"MTSerie {self.label}:\n"
         for x in self.dtab:
             s = s+x.__str__()
         return s
@@ -509,6 +511,7 @@ class MTSerie:
                 plt.plot(x.mjd_tab, x.val_tab, color=color, marker="|")
             else:
                 ax.plot(x.mjd_tab, x.val_tab, color=color, marker="|")
+            plt.title(self.label)
         if show == 1:
             plt.show()
 
@@ -931,5 +934,110 @@ class MGserie:
 
 
 class GTserie:
-    None
+    """
+    Class storing multiple time series of type MTserie
+    """
+    
+    def __init__(self, name):
+        self.name = name
+        self.mts_dict = dict()
+        self.number_of_mts = 0
+        self.mjd_groups = dict()
+    
+    def __str__(self):
+        return (
+            f"{self.name}:\n"
+            f"\tnumber of series: {self.number_of_mts}"
+        )
 
+    def append_mtserie(self, mts_name, mts, mjd_group=''):
+        """
+        Append MTSerie to GTserie
+
+        Params:
+            mts_name (str): name of MTSerie
+            mts (MTSerie): data
+            time_group (str): name of mjd group
+        """
+        self.mts_dict[mts_name] = mts
+        self.number_of_mts = len(self.mts_dict)
+        self.mjd_groups[mts_name] = mjd_group
+    
+    def import_data_rocit_oc(
+        self,
+        info,
+        name='umk',
+        headers = ['date', 'time', 'frac_freq', 'confidence', 'systematics'],
+    ):
+        df = import_data_to_df_rocit_oc(info=info, name=name, headers=headers)
+        self.append_df_as_mtseries(df, name, columns=['frac_freq', 'confidence', 'systematics'])
+
+    def import_data_rocit_gnss(self, path='./Data_storage/sn112-nmij.dat', name='gnss'):
+        df = import_data_to_df_rocit_gnss(path=path)
+        self.append_df_as_mtseries(df, name, ['delta_t_ns'])
+        
+    def append_df_as_mtseries(self, df, name, columns):
+        for column in columns:
+            self.append_mtserie(
+                mts_name=name+'_'+column,
+                mts=MTSerie(
+                    label=name+'_'+column,
+                    TSerie=TSerie(mjd=df['mjd'].to_numpy(), val=df[column].to_numpy())
+                ),
+                mjd_group=name+'_mjd',
+            )
+    
+    def print_mts(self):
+        for a in self.mts_dict:
+            print(self.mts_dict[a])
+    
+    def plot_mts_one_by_one(self):
+        for a in self.mts_dict:
+            self.mts_dict[a].plot()
+    
+    def rmoutlayers(self, mts_names=[]):
+        for mts_name in mts_names:
+            mts = self.mts_dict[mts_name]
+            mts.rmoutlayers()
+
+
+def import_data_to_df_rocit_oc(
+    info,
+    name='umk',
+    headers = ['date', 'time', 'frac_freq', 'confidence', 'systematics'],
+):
+    """
+    Importing data to dataframe (pandas) from March 2020 Rocit campaign and creating mjd data
+
+    Args:
+        info (dict): dictionary including information about path to lab/clock data
+            ex.:
+                data_path = path.Path('./Data_storage/clocks_vs_maser')
+                info['umk'] ={'data_dir': data_path / 'UMK_Sr1-HMAOS'}
+        name: name of the lab/clock
+        headers: names of columns imported from file
+    Return:
+        Pandas dataframe
+    """
+    
+    df = pd.DataFrame([])
+    for f in info[name]['data_dir'].iterdir():
+        if f.suffix == '.dat':
+            p = pd.read_csv(f,names=headers,skiprows=11, 
+                        skip_blank_lines=True, 
+                        sep=' |\t', engine='python')
+            df = pd.concat([df,p],ignore_index=True)
+    df['mjd']=Time(pd.to_datetime(df['date']+' '+df['time'])).mjd
+    return df
+
+
+def import_data_to_df_rocit_gnss(path='./Data_storage/sn112-nmij.dat'):
+    headers = ['mjd', 'delta_t_ns']
+    p = pd.read_csv(
+        path, 
+        names=headers,
+        skip_blank_lines=True,
+        sep='\t',
+    )
+    df = pd.DataFrame(p)
+    return df
