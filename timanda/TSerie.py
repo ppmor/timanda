@@ -229,6 +229,11 @@ class TSerie:
                 val=self.val_tab[(tN+1):]
             )
             return ([left, right], 4)
+    
+    def rm_indexes(self, indexes):
+        self.mjd_tab = np.delete(self.mjd_tab, indexes)
+        self.val_tab = np.delete(self.val_tab, indexes)
+        self.len = len(self.mjd_tab)
 
     def rm_outlayers_singledelta(self, max_delta):
         self.calc_tab()
@@ -237,16 +242,28 @@ class TSerie:
                 print('outlayer detected')
                 self.val_tab[i] = self.val_tab[i-1]
 
-    def rmOutlayersOfTarget(self, target, maxDifference):
+    def rmOutlayersOfTarget(self, target, maxDifference, get_indexes_only=False):
+        indexes_to_delete = []
         i = 0
-        # print('self.len: ', self.len)
+        self.len=len(self.mjd_tab)
         while i < self.len:
             if abs(self.val_tab[i]-target) > maxDifference:
-                self.val_tab = np.delete(self.val_tab, i)
-                self.mjd_tab = np.delete(self.mjd_tab, i)
-                i = i-1
-                self.len -= 1
+                indexes_to_delete.append(i)
             i = i+1
+        if not get_indexes_only:
+            self.rm_indexes(indexes_to_delete)
+        return indexes_to_delete
+    
+    def rm_value(self, value, get_indexes_only=False):
+        indexes_to_delete = []
+        i = 0
+        while i < self.len:
+            if self.val_tab[i] == value:
+                indexes_to_delete.append(i)
+            i = i+1
+        if not get_indexes_only:
+            self.rm_indexes(indexes_to_delete)
+        return indexes_to_delete
 
     def time_shift(self, sec):
         self.mjd_tab = self.mjd_tab+sec/(24*60*60)
@@ -505,8 +522,6 @@ class MTSerie:
         for x in self.dtab:
             if color == '':
                 color = self.color
-            # plt.plot(x.mjd_tab, x.val_tab, color=color, linewidth=40)
-            # plt.scatter(x.mjd_tab, x.val_tab, color=color, s=700, marker="|")
             if ax is None:
                 plt.plot(x.mjd_tab, x.val_tab, color=color, marker="|")
             else:
@@ -667,21 +682,41 @@ class MTSerie:
                 self.dtab.insert(i, a[0])
             i = i-1
 
+    def rm_indexes(self, indexes):
+        for i, tab in enumerate(self.dtab):
+            tab.rm_indexes(indexes[i])
+
     def rmoutlayers(self, max_iterations=4, target=None, maxdiff=None):
         i = 0
         no_rm = 0
+        indexes_in_while_to_delete = []
         while (i < max_iterations and no_rm == 0):
             i += 1
-            print(i)
             input_len = len(self.mjd_tab())
             if target is None:
                 target = self.mean()
             if maxdiff is None:
                 maxdiff = 3*self.std()
+            indexes_in_mts_to_delete = []
             for x in self.dtab:
-                x.rmOutlayersOfTarget(target=target, maxDifference=maxdiff)
+                indexes_in_mts_to_delete.append(
+                    x.rmOutlayersOfTarget(
+                        target=target,
+                        maxDifference=maxdiff,
+                    )
+                )
+            indexes_in_while_to_delete.append(indexes_in_mts_to_delete)
             if input_len == len(self.mjd_tab()):
                 no_rm = 1
+        return indexes_in_while_to_delete
+    
+    def rm_value(self, value, get_indexes_only=False):
+        indexes_in_mts_to_delete = []
+        for x in self.dtab:
+            indexes_in_mts_to_delete.append(
+                x.rm_value(value, get_indexes_only=get_indexes_only)
+            )
+        return indexes_in_mts_to_delete
 
     def mean(self):
         if len(self.dtab) == 0:
@@ -987,7 +1022,7 @@ class GTserie:
                 mjd_group=name+'_mjd',
             )
     
-    def print_mts(self):
+    def print_all_mts(self):
         for a in self.mts_dict:
             print(self.mts_dict[a])
     
@@ -995,10 +1030,40 @@ class GTserie:
         for a in self.mts_dict:
             self.mts_dict[a].plot()
     
-    def rmoutlayers(self, mts_names=[]):
-        for mts_name in mts_names:
-            mts = self.mts_dict[mts_name]
-            mts.rmoutlayers()
+    def plot_mts(self, mts_name):
+        self.mts_dict[mts_name].plot()
+
+    def get_mtss_from_mjd_group(self, mjd_group, exclude=None):
+        keys = [key for key, value in self.mjd_groups.items() if value == mjd_group]
+        if exclude in keys:
+            keys.remove(exclude)
+        return keys
+
+    def rm_indexes_from_mjd_group(self, indexes, mjd_group, exclude):
+        mtss = self.get_mtss_from_mjd_group(mjd_group=mjd_group, exclude=exclude)
+        for mts in mtss:
+            self.mts_dict[mts].rm_indexes(indexes)
+
+    def rm_outlayers(self, mts_name):
+        mts = self.mts_dict[mts_name]
+        indexes_to_delete_iterated = mts.rmoutlayers()
+        mjd_group = self.mjd_groups[mts_name]
+        for indexes_to_delete in indexes_to_delete_iterated:
+            self.rm_indexes_from_mjd_group(
+                indexes=indexes_to_delete,
+                mjd_group=mjd_group,
+                exclude=mts_name
+            )
+    
+    def rm_value(self, mts_name, value):
+        mts = self.mts_dict[mts_name]
+        indexes_in_mts_to_delete = mts.rm_value(value, get_indexes_only=True)
+        mjd_group = self.mjd_groups[mts_name]
+        self.rm_indexes_from_mjd_group(
+            indexes=indexes_in_mts_to_delete,
+            mjd_group=mjd_group,
+            exclude=None
+        )
 
 
 def import_data_to_df_rocit_oc(
@@ -1023,10 +1088,15 @@ def import_data_to_df_rocit_oc(
     df = pd.DataFrame([])
     for f in info[name]['data_dir'].iterdir():
         if f.suffix == '.dat':
-            p = pd.read_csv(f,names=headers,skiprows=11, 
-                        skip_blank_lines=True, 
-                        sep=' |\t', engine='python')
-            df = pd.concat([df,p],ignore_index=True)
+            p = pd.read_csv(
+                f,
+                names=headers,
+                skiprows=11, 
+                skip_blank_lines=True, 
+                sep=' |\t',
+                engine='python'
+            )
+            df = pd.concat([df, p], ignore_index=True)
     df['mjd']=Time(pd.to_datetime(df['date']+' '+df['time'])).mjd
     return df
 
@@ -1041,3 +1111,10 @@ def import_data_to_df_rocit_gnss(path='./Data_storage/sn112-nmij.dat'):
     )
     df = pd.DataFrame(p)
     return df
+
+
+def two_mts_equal_mjd(mts1, mts2):
+    return (
+        len(mts1.dtab) == len(mts2.dtab)
+        and all(np.array_equal(a, b) for a, b in zip(mts1.mjd_tab(), mts2.mjd_tab()))
+    )

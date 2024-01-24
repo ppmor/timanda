@@ -2,6 +2,12 @@
 
 This document records all significant changes made to the "timanda" data analysis project. The purpose of this changelog is to inform users about new features, bug fixes, and modifications in each version.
 
+## [0.0.5] - 2024-01-24
+### Added
+- GTserie class
+- rm_outlayers
+- rm_value
+
 ## [0.0.4] - 2023-12-22
 ### Added
 - function 'rm3sigma_df'
