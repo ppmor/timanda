@@ -1,4 +1,5 @@
 from astropy.time import Time
+from scipy.stats import linregress
 import decimal as dec  # TODO: remove after removing alphanorm
 import numpy as np
 import matplotlib.pyplot as plt
@@ -370,6 +371,12 @@ class TSerie:
     def toMTSerie(self):
         return MTSerie(TSerie=self)
     
+    def first_mjd(self):
+        return self.mjd_tab[0]
+    
+    def last_mjd(self):
+        return self.mjd_tab[-1]
+    
 
 class MTSerie:
     def __init__(self, label='', TSerie=None, color='green', txtFileName=None):
@@ -568,10 +575,10 @@ class MTSerie:
                 out.append(x.mjd2val(mjd))
         return np.array(out)
 
-    def split(self, min_gap=8):
+    def split(self, min_gap_s=8):
         tmp_tab = []
         for a in self.dtab:
-            spl = a.split(min_gap)
+            spl = a.split(min_gap_s)
             for s in spl:
                 tmp_tab.append(s)
         self.dtab = tmp_tab
@@ -632,9 +639,9 @@ class MTSerie:
             else:
                 return self.dtab[t].val_tab[i]
 
-    def getrange(self, fmjd, tmjd):
-        ft, fN = self.mjd2tabNoandindex(fmjd)
-        tt, tN = self.mjd2tabNoandindex(tmjd)
+    def getrange(self, from_mjd, to_mjd):
+        ft, fN = self.mjd2tabNoandindex(from_mjd)
+        tt, tN = self.mjd2tabNoandindex(to_mjd)
         if fN is not None:
             fN = fN+1
         if (ft == tt and fN is None):
@@ -646,7 +653,7 @@ class MTSerie:
             tt = 0
 
         for tab in self.dtab[ft:tt+1]:
-            tmp = tab.getrange(fmjd, tmjd)
+            tmp = tab.getrange(from_mjd, to_mjd)
             if tmp is not None:
                 out.add_TSerie(tmp)
         if len(out.dtab) == 0:
@@ -785,9 +792,95 @@ class MTSerie:
                 f.write('%f\t%f\n' % (x.mjd_tab[i], x.val_tab[i]))
                 i = i+1
         f.close()
+    
+    def first_mjd(self):
+        return self.dtab[0].first_mjd()
+    
+    def last_mjd(self):
+        return self.dtab[-1].last_mjd()
+        
+    def resample(self, fun='mean', period_s=60, start_mjd=None, points_ratio=0.7):
+        first_mjd = self.first_mjd()
+        first_mjd_int = np.floor(first_mjd)
+        last_mjd = self.last_mjd()
+        last_mjd_int = np.floor(last_mjd)
+        period_mjd = period_s/(24*60*60)
+        start_mjd = np.floor((first_mjd % 1)/period_mjd)*period_mjd + first_mjd_int
+        stop_mjd = np.ceil((last_mjd % 1)/period_mjd)*period_mjd + last_mjd_int
+        mjd_grid = np.arange(start_mjd, stop_mjd+1e-6, period_mjd)
+        return self.resample_to_mjd_array(
+            mjd_grid=mjd_grid,
+            grid_period_s=period_s,
+            fun=fun,
+            points_ratio=points_ratio,
+        )
+
+    def resample_to_mjd_array(self, mjd_grid, grid_period_s, fun='mean', points_ratio=0.7):
+        """
+        params:
+            mjd_grid: np.array 1D
+        """
+
+        sample_period_s = self.get_sample_period_s()
+        expected_number_of_points = grid_period_s/sample_period_s
+        period_mjd = grid_period_s/(24*60*60)
+        ts=TSerie()
+        for mjd in mjd_grid:
+            sub_mts = self.getrange(mjd, mjd+period_mjd)
+            if sub_mts and sub_mts.get_number_of_points() > expected_number_of_points*points_ratio:
+                if fun=='mean':
+                    calc = sub_mts.mean()
+                if fun=='slope':
+                    calc = sub_mts.slope()
+                if fun=='slope_s':
+                    calc = sub_mts.slope_s()
+                if calc:
+                    ts.append(mjd=mjd+0.5*period_mjd, val=calc)
+                    ts.__str__()
+        out_mts = MTSerie(TSerie=ts)
+        out_mts.split(min_gap_s=grid_period_s*1.7)
+        return out_mts
+
+    def resample_to_mts_grid(self, mts, grid_period_s, fun='mean', points_ratio=0.7):
+        mjd_array = mts.mjd_tab()
+        print(mjd_array)
+        return self.resample_to_mjd_array(
+            mjd_grid = mjd_array,
+            grid_period_s=grid_period_s,
+            fun=fun,
+            points_ratio=points_ratio,
+        )
+
+    def get_sample_period_s(self):
+        time = self.getTotalTimeWithoutGaps()
+        points = self.get_number_of_points()
+        return 24*60*60*time/points
+
+    def get_number_of_points(self):
+        num_of_points = 0
+        for x in self.dtab:
+            num_of_points += len(x.mjd_tab)
+        return num_of_points
+    
+    def slope(self):
+        number_of_points = self.get_number_of_points()
+        if number_of_points < 2:
+            return np.nan
+        slope, intercept, r_value, p_value, str_err = linregress(
+            self.mjd_tab(), self.val_tab()
+        )
+        return slope
+
+    def slope_s(self):
+        return self.slope()/(24*60*60)
 
 
 class TimePeriod:
+    """
+        Class for managing single continuous time period.
+        Includes information only about start and stop mjd.
+    """
+    
     def __init__(self, start, stop):
         self.start = min(start, stop)
         self.stop = max(start, stop)
@@ -796,6 +889,10 @@ class TimePeriod:
         return str(self.start) + " -> " + str(self.stop)
 
     def __mul__(self, b):
+        """
+            Intersection of TimePeriods
+        """
+        
         if isinstance(b, TimePeriod):
             start = max(self.start, b.start)
             stop = min(self.stop, b.stop)
@@ -1064,6 +1161,13 @@ class GTserie:
             mjd_group=mjd_group,
             exclude=None
         )
+    
+    def split_mjd_group(self, mjd_group, min_gap_s=160):
+        mtss = self.get_mtss_from_mjd_group(mjd_group)
+        print(mtss)
+        for mts in mtss:
+            self.mts_dict[mts].__str__()
+            self.mts_dict[mts].split(min_gap_s=min_gap_s)
 
 
 def import_data_to_df_rocit_oc(
