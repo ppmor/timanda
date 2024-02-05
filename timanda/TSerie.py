@@ -746,9 +746,9 @@ class MTSerie:
         tab = []
         totlen = 0
         for x in self.dtab:
-            # print(x)
-            tab.append([x.mean, x.len])
-            totlen = totlen+x.len
+            if len(x.mjd_tab)>0:
+                tab.append([x.mean, x.len])
+                totlen = totlen+x.len
         out = 0
         for x in tab:
             out = out + x[0]*x[1]/totlen
@@ -1172,11 +1172,14 @@ class GTserie:
     def plot_mts(self, mts_name):
         self.mts_dict[mts_name].plot()
 
-    def plot(self):
-        fig, axs = plt.subplots(7,1,  constrained_layout=True, sharex=True)
-        for i, mts_name in enumerate(self.mts_dict):
+    def plot(self, figsize=(7, 7), mts_names=None):
+        if not mts_names:
+            mts_names = self.mts_dict
+        fig, axs = plt.subplots(len(mts_names),1,  constrained_layout=True, sharex=True, figsize=figsize)
+        for i, mts_name in enumerate(mts_names):
             self.mts_dict[mts_name].plot(ax=axs[i], show=0)
             axs[i].grid(True)
+            axs[i].set_title(mts_name)
         plt.tight_layout()
         plt.show()
 
@@ -1270,6 +1273,62 @@ class GTserie:
             # g.rm_value('nmij_frac_freq', none_val)
         if new_gts:
             return g     
+        
+    def add_mts_to_mts(self, mts_name_1, mts_name_2, mts_name_out):
+        mts1=self.mts_dict[mts_name_1]
+        mts2=self.mts_dict[mts_name_2]
+        out_mts = MTSerie(label=mts_name_out)
+        for i_dtab in range(0, len(mts1.dtab)):
+            ts1 = mts1.dtab[i_dtab]
+            ts2 = mts2.dtab[i_dtab]
+            val_tab = list()
+            mjd_tab = list()
+            for i_ts in range(0,len(ts1.val_tab)):
+                val_tab.append(ts1.val_tab[i_ts]+ts2.val_tab[i_ts])
+                mjd_tab.append(ts1.mjd_tab[i_ts])
+            out_ts = TSerie(mjd=mjd_tab, val=val_tab)
+            out_mts.add_TSerie(out_ts)
+        self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
+
+    def math_mts_and_mts(self, operation, mts_name_1, mts_name_2, mts_name_out):
+        mts1=self.mts_dict[mts_name_1]
+        mts2=self.mts_dict[mts_name_2]
+        out_mts = MTSerie(label=mts_name_out)
+        for i_dtab in range(0, len(mts1.dtab)):
+            ts1 = mts1.dtab[i_dtab]
+            ts2 = mts2.dtab[i_dtab]
+            val_tab = list()
+            mjd_tab = list()
+            for i_ts in range(0,len(ts1.val_tab)):
+                if operation == 'add':
+                    val_tab.append(ts1.val_tab[i_ts]+ts2.val_tab[i_ts])
+                if operation == 'multiply':
+                    val_tab.append(ts1.val_tab[i_ts]*ts2.val_tab[i_ts])
+                if operation == 'divide':
+                    val_tab.append(ts1.val_tab[i_ts]/ts2.val_tab[i_ts])
+                mjd_tab.append(ts1.mjd_tab[i_ts])
+            out_ts = TSerie(mjd=mjd_tab, val=val_tab)
+            out_mts.add_TSerie(out_ts)
+        self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
+    
+    def math_mts_and_number(self, operation, mts_name_1, number, mts_name_out):
+        mts1=self.mts_dict[mts_name_1]
+        out_mts = MTSerie(label=mts_name_out)
+        for i_dtab in range(0, len(mts1.dtab)):
+            ts1 = mts1.dtab[i_dtab]
+            val_tab = list()
+            mjd_tab = list()
+            for i_ts in range(0,len(ts1.val_tab)):
+                if operation == 'add':
+                    val_tab.append(ts1.val_tab[i_ts]+number)
+                if operation == 'multiply':
+                    val_tab.append(ts1.val_tab[i_ts]*number)
+                if operation == 'divide':
+                    val_tab.append(ts1.val_tab[i_ts]/number)
+                mjd_tab.append(ts1.mjd_tab[i_ts])
+            out_ts = TSerie(mjd=mjd_tab, val=val_tab)
+            out_mts.add_TSerie(out_ts)
+        self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
 
 
 def import_data_to_df_rocit_oc(
