@@ -377,6 +377,21 @@ class TSerie:
     def last_mjd(self):
         return self.mjd_tab[-1]
     
+    def time_diff_to_freq_diff(self, fill_last_point=True):
+        t_mjd=list()
+        t_val=list()
+        for i in range(0, len(self.mjd_tab)-1):
+            delta_mjd = (self.mjd_tab[i+1]-self.mjd_tab[i])*(24*60*60)
+            f = (self.val_tab[i+1]-self.val_tab[i])/delta_mjd
+            t_mjd.append(self.mjd_tab[i])
+            t_val.append(f)
+        if fill_last_point:
+            t_val.append(t_mjd[-1])
+            t_mjd.append(self.mjd_tab[-1])
+        self.mjd_tab=np.array(t_mjd)
+        self.val_tab=np.array(t_val)
+            
+    
 
 class MTSerie:
     def __init__(self, label='', TSerie=None, color='green', txtFileName=None):
@@ -815,7 +830,15 @@ class MTSerie:
             points_ratio=points_ratio,
         )
 
-    def resample_to_mjd_array(self, mjd_grid, grid_period_s, fun='mean', points_ratio=0.7):
+    def resample_to_mjd_array(
+        self,
+        mjd_grid,
+        grid_period_s,
+        fun='mean',
+        points_ratio=0.7,
+        none_fields=False,
+        none_val=None,
+    ):
         """
         params:
             mjd_grid: np.array 1D
@@ -835,20 +858,35 @@ class MTSerie:
                 if fun=='slope_s':
                     calc = sub_mts.slope_s()
                 if calc:
-                    ts.append(mjd=mjd+0.5*period_mjd, val=calc)
+                    ts.append(mjd=mjd, val=calc)
+                    ts.__str__()
+                else:
+                    ts.append(mjd=mjd, val=none_val)
+            else:
+                if none_fields:
+                    ts.append(mjd=mjd, val=none_val)
                     ts.__str__()
         out_mts = MTSerie(TSerie=ts)
         out_mts.split(min_gap_s=grid_period_s*1.7)
         return out_mts
 
-    def resample_to_mts_grid(self, mts, grid_period_s, fun='mean', points_ratio=0.7):
+    def resample_to_mts_grid(
+        self,
+        mts,
+        grid_period_s,
+        fun='mean',
+        points_ratio=0.7,
+        none_fields=False,
+        none_val=None,
+    ):
         mjd_array = mts.mjd_tab()
-        print(mjd_array)
         return self.resample_to_mjd_array(
             mjd_grid = mjd_array,
             grid_period_s=grid_period_s,
             fun=fun,
             points_ratio=points_ratio,
+            none_fields=none_fields,
+            none_val=none_val,
         )
 
     def get_sample_period_s(self):
@@ -873,6 +911,10 @@ class MTSerie:
 
     def slope_s(self):
         return self.slope()/(24*60*60)
+    
+    def time_diff_to_freq_diff(self):
+        for x in self.dtab:
+            x.time_diff_to_freq_diff()
 
 
 class TimePeriod:
@@ -1130,6 +1172,14 @@ class GTserie:
     def plot_mts(self, mts_name):
         self.mts_dict[mts_name].plot()
 
+    def plot(self):
+        fig, axs = plt.subplots(7,1,  constrained_layout=True, sharex=True)
+        for i, mts_name in enumerate(self.mts_dict):
+            self.mts_dict[mts_name].plot(ax=axs[i], show=0)
+            axs[i].grid(True)
+        plt.tight_layout()
+        plt.show()
+
     def get_mtss_from_mjd_group(self, mjd_group, exclude=None):
         keys = [key for key, value in self.mjd_groups.items() if value == mjd_group]
         if exclude in keys:
@@ -1164,10 +1214,62 @@ class GTserie:
     
     def split_mjd_group(self, mjd_group, min_gap_s=160):
         mtss = self.get_mtss_from_mjd_group(mjd_group)
-        print(mtss)
         for mts in mtss:
             self.mts_dict[mts].__str__()
             self.mts_dict[mts].split(min_gap_s=min_gap_s)
+    
+    def split(self, min_gap_s):
+        for mjd_group in self.mjd_groups:
+            self.split_mjd_group(mjd_group=mjd_group, min_gap_s=min_gap_s)
+
+    def resample_to_mts(
+        self,
+        ref_mts_name,
+        grid_period_s,
+        none_fields=True,
+        rm_none_fields=True,
+        none_val=None,
+        new_gts=True,
+    ):
+        ref_mts = self.mts_dict[ref_mts_name]
+        mjd_group = self.mjd_groups[ref_mts_name]
+        # mtss_names = [mts_name for mts_name in self.mts_dict]
+        if new_gts:
+            g = GTserie(name='resampled')
+        for mts_name in self.mts_dict:
+            mts = self.mts_dict[mts_name]
+            if self.mjd_groups[mts_name] == mjd_group:
+                tmp = mts
+            else:
+                tmp = mts.resample_to_mts_grid(
+                    mts=ref_mts,
+                    grid_period_s=grid_period_s,
+                    fun='mean',
+                    points_ratio=0.7,
+                    none_fields=none_fields,
+                    none_val=none_val,
+                )
+            if not new_gts:
+                self.mts_dict[mts_name]=tmp
+                self.mts_dict[mts_name].__str__()
+            else:
+                g.append_mtserie(
+                    mts_name=mts_name,
+                    mts=tmp,
+                    mjd_group=mjd_group,
+                )
+        if rm_none_fields:
+            # for mts_name in g.mts_dict:
+            #     g.rm_value(mts_name, none_val)
+            print(
+                two_mts_equal_mjd(
+                    self.mts_dict['umk_frac_freq'],
+                    self.mts_dict['nmij_frac_freq']
+                )
+            )
+            # g.rm_value('nmij_frac_freq', none_val)
+        if new_gts:
+            return g     
 
 
 def import_data_to_df_rocit_oc(
