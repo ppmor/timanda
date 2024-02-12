@@ -1,6 +1,8 @@
 from astropy.time import Time
 from scipy.stats import linregress
 import decimal as dec  # TODO: remove after removing alphanorm
+from decimal import Decimal as D
+from decimal import getcontext
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,10 +12,14 @@ from astropy.convolution import Gaussian1DKernel, convolve
 
 
 class TSerie:
-    def __init__(self, label='', mjd=[], val=[]):
+    def __init__(self, label='', mjd=[], val=[], pps=None):
         self.label = label
         self.mjd_tab = np.array(mjd)
         self.val_tab = np.array(val)
+        if pps is None:
+            self.pps_tab = np.array([1]*len(mjd)) # points per sample, used when resampling
+        else:
+            self.pps_tab = np.array(pps)
         self.len = len(self.mjd_tab)
         self.calc_tab()
 
@@ -29,13 +35,25 @@ class TSerie:
             )
             if self.len <= 10:
                 for i in range(0, self.len):
-                    s = s+'\t%.6f\t%f\n' % (self.mjd_tab[i], self.val_tab[i])
+                    s = s+'\t%.6f\t%f\t%f\n' % (
+                        self.mjd_tab[i],
+                        self.val_tab[i],
+                        self.pps_tab[i],
+                    )
             else:
                 for i in range(0, 5):
-                    s = s+'\t%.6f\t%f\n' % (self.mjd_tab[i], self.val_tab[i])
+                    s = s+'\t%.6f\t%f\t%f\n' % (
+                        self.mjd_tab[i],
+                        self.val_tab[i],
+                        self.pps_tab[i]
+                    )
                 s = s+'\t...\n'
                 for i in range(self.len-5, self.len):
-                    s = s+'\t%.6f\t%f\n' % (self.mjd_tab[i], self.val_tab[i])
+                    s = s+'\t%.6f\t%f\t%f\n' % (
+                        self.mjd_tab[i],
+                        self.val_tab[i],
+                        self.pps_tab[i],
+                    )
         return s
 
     def __add__(self, b):
@@ -104,9 +122,40 @@ class TSerie:
                      val=self.val_tab)
         return out
 
-    def mean(self):
+    def mean_use_pps(self, decimal=False, decimal_out=False):
         if len(self.val_tab) > 0:
-            return np.mean(self.val_tab)
+            if decimal:
+                getcontext().prec = 21
+                d_pps_tab = [D(str(x)) for x in self.pps_tab]
+                d_val_tab = [D(str(x)) for x in self.val_tab]
+                d_pps_val_tab = [x*y for x, y in zip(d_pps_tab, d_val_tab)]
+                d_sum_points = sum(d_pps_tab)
+                d_mean = sum(d_pps_val_tab)/d_sum_points
+                if decimal_out:
+                    return d_mean, d_sum_points
+                else:
+                    return float(d_mean), int(d_sum_points)
+            else:
+                pps_val_tab = self.pps_tab*self.val_tab
+                sum_points = sum(pps_val_tab)
+                mean_out = sum(pps_val_tab)/float(sum_points)
+                return mean_out, int(sum_points)
+        else:
+            return None
+
+    def mean(self, decimal=False, decimal_out=False, use_pps=False):
+        if use_pps:
+            return self.mean_use_pps(decimal=decimal, decimal_out=decimal_out)
+        if len(self.val_tab) > 0:
+            if decimal:
+                getcontext().prec = 21
+                darr = [D(x) for x in self.val_tab]
+                if decimal_out:
+                    return sum(darr)/len(darr)
+                else:
+                    return float(sum(darr)/len(darr))
+            else:
+                return np.mean(self.val_tab)
         else:
             return None
 
@@ -137,17 +186,22 @@ class TSerie:
         for j in range(0, len(tab_i)-1):
             out_tab.append(TSerie(
                 mjd=self.mjd_tab[tab_i[j]:tab_i[j+1]],
-                val=self.val_tab[tab_i[j]:tab_i[j+1]]
+                val=self.val_tab[tab_i[j]:tab_i[j+1]],
+                pps=self.pps_tab[tab_i[j]:tab_i[j+1]],
             ))
         return out_tab
 
-    def append(self, mjd, val):
+    def append(self, mjd, val, pps=None):
         self.mjd_tab = np.append(self.mjd_tab, mjd)
         self.val_tab = np.append(self.val_tab, val)
+        if pps:
+            self.pps_tab = np.append(self.pps_tab, pps)
+        else:
+            self.pps_tab = np.append(self.pps_tab, 1)
 
     def last(self):
         out = TSerie()
-        out.append(self.mjd_tab[-1], self.val_tab[-1])
+        out.append(self.mjd_tab[-1], self.val_tab[-1], self.pps_tab[-1])
         return out
 
     def mjd2index(self, mjd, init_index=None):
@@ -213,27 +267,39 @@ class TSerie:
         if (fmjd <= self.mjd_start and tmjd < self.mjd_stop):
             return (TSerie(
                 mjd=self.mjd_tab[(tN+1):],
-                val=self.val_tab[(tN+1):]),
+                val=self.val_tab[(tN+1):],
+                pps=self.pps_tab[(tN+1):],
+                ),
                 2
             )
         if (fmjd > self.mjd_start and tmjd >= self.mjd_stop):
             if fmjd != self.mjd_tab[fN]:
                 fN = fN+1
-            return (TSerie(mjd=self.mjd_tab[:fN],
-                           val=self.val_tab[:fN]), 3)
+            return (TSerie(
+                mjd=self.mjd_tab[:fN],
+                val=self.val_tab[:fN],
+                pps=self.pps_tab[:fN],
+                ),
+                3)
         if (fmjd > self.mjd_start and tmjd < self.mjd_stop):
             if fmjd != self.mjd_tab[fN]:
                 fN = fN+1
-            left = TSerie(mjd=self.mjd_tab[:fN], val=self.val_tab[:fN])
+            left = TSerie(
+                mjd=self.mjd_tab[:fN],
+                val=self.val_tab[:fN],
+                pps=self.pps_tab[:fN],
+            )
             right = TSerie(
                 mjd=self.mjd_tab[(tN+1):],
-                val=self.val_tab[(tN+1):]
+                val=self.val_tab[(tN+1):],
+                pps=self.pps_tab[(tN+1):],
             )
             return ([left, right], 4)
     
     def rm_indexes(self, indexes):
         self.mjd_tab = np.delete(self.mjd_tab, indexes)
         self.val_tab = np.delete(self.val_tab, indexes)
+        self.pps_tab = np.delete(self.pps_tab, indexes)
         self.len = len(self.mjd_tab)
 
     def rm_outlayers_singledelta(self, max_delta):
@@ -274,13 +340,13 @@ class TSerie:
         N = 5
         if len(self.mjd_tab) > 2*N:
             for x in range(0, 5):
-                print(self.mjd_tab[x], self.val_tab[x])
+                print(self.mjd_tab[x], self.val_tab[x], self.pps_tab[x])
             print('...')
             for x in range(self.length-6, self.length-1):
-                print(self.mjd_tab[x], self.val_tab[x])
+                print(self.mjd_tab[x], self.val_tab[x], self.pps_tab[x])
         elif len(self.mjd_tab) > 0:
             for x in range(0, 2*N-1):
-                print(self.mjd_tab[x], self.val_tab[x])
+                print(self.mjd_tab[x], self.val_tab[x], self.pps_tab[x])
         else:
             print('Empty')
 
@@ -345,14 +411,16 @@ class TSerie:
         plt.scatter(self.mjd_tab, self.val_tab)
         plt.show()
 
-    def rm_first(self, n):
+    def rm_first(self, n=1):
         self.val_tab = np.delete(self.val_tab, np.s_[0:n], None)
         self.mjd_tab = np.delete(self.mjd_tab, np.s_[0:n], None)
+        self.pps_tab = np.delete(self.pps_tab, np.s_[0:n], None)
         self.calc_tab()
 
-    def rm_last(self, n):
+    def rm_last(self, n=1):
         self.val_tab = np.delete(self.val_tab, np.s_[-n:], None)
         self.mjd_tab = np.delete(self.mjd_tab, np.s_[-n:], None)
+        self.pps_tab = np.delete(self.pps_tab, np.s_[-n:], None)
         self.calc_tab()
 
     def gauss_filter(self, stddev=50):
@@ -390,8 +458,7 @@ class TSerie:
             t_mjd.append(self.mjd_tab[-1])
         self.mjd_tab=np.array(t_mjd)
         self.val_tab=np.array(t_val)
-            
-    
+             
 
 class MTSerie:
     def __init__(self, label='', TSerie=None, color='green', txtFileName=None):
@@ -754,6 +821,32 @@ class MTSerie:
             out = out + x[0]*x[1]/totlen
         return out
 
+    def mean_use_pps(self, decimal=False, decimal_out=False):
+        if len(self.dtab) == 0:
+            return None
+        tab = []
+        total_points=0
+        for x in self.dtab:
+            if len(x.mjd_tab)>0:
+                mean, ts_points = x.mean_use_pps(
+                    decimal=decimal,
+                    decimal_out=decimal_out
+                )
+                tab.append((mean, ts_points))
+                total_points=total_points+ts_points
+        if decimal:
+            out = D('0')
+            for x in tab:
+                out = out+D(x[0])*D(x[1])/D(total_points)
+        else:
+            out = 0
+            for x in tab:
+                out = out + x[0]*x[1]/total_points
+        if decimal_out:
+            return D(out)
+        else:
+            return float(out)
+
     def std(self):
         if len(self.dtab) == 0:
             return None
@@ -858,13 +951,24 @@ class MTSerie:
                 if fun=='slope_s':
                     calc = sub_mts.slope_s()
                 if calc:
-                    ts.append(mjd=mjd, val=calc)
+                    ts.append(
+                        mjd=mjd,
+                        val=calc,
+                        pps=sub_mts.get_number_of_points()
+                    )
                     ts.__str__()
                 else:
-                    ts.append(mjd=mjd, val=none_val)
+                    ts.append(
+                        mjd=mjd,
+                        val=none_val,
+                        pps=sub_mts.get_number_of_points()
+                    )
             else:
                 if none_fields:
-                    ts.append(mjd=mjd, val=none_val)
+                    ts.append(
+                        mjd=mjd,
+                        val=none_val,
+                    )
                     ts.__str__()
         out_mts = MTSerie(TSerie=ts)
         out_mts.split(min_gap_s=grid_period_s*1.7)
@@ -1233,6 +1337,7 @@ class GTserie:
         rm_none_fields=True,
         none_val=None,
         new_gts=True,
+        points_ratio=0.7,
     ):
         ref_mts = self.mts_dict[ref_mts_name]
         mjd_group = self.mjd_groups[ref_mts_name]
@@ -1248,7 +1353,7 @@ class GTserie:
                     mts=ref_mts,
                     grid_period_s=grid_period_s,
                     fun='mean',
-                    points_ratio=0.7,
+                    points_ratio=points_ratio,
                     none_fields=none_fields,
                     none_val=none_val,
                 )
@@ -1290,7 +1395,7 @@ class GTserie:
             out_mts.add_TSerie(out_ts)
         self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
 
-    def math_mts_and_mts(self, operation, mts_name_1, mts_name_2, mts_name_out):
+    def math_mts_and_mts(self, operation, mts_name_1, mts_name_2, mts_name_out, decimal=False):
         mts1=self.mts_dict[mts_name_1]
         mts2=self.mts_dict[mts_name_2]
         out_mts = MTSerie(label=mts_name_out)
@@ -1299,15 +1404,16 @@ class GTserie:
             ts2 = mts2.dtab[i_dtab]
             val_tab = list()
             mjd_tab = list()
+            pps_tab = list()
             for i_ts in range(0,len(ts1.val_tab)):
-                if operation == 'add':
-                    val_tab.append(ts1.val_tab[i_ts]+ts2.val_tab[i_ts])
-                if operation == 'multiply':
-                    val_tab.append(ts1.val_tab[i_ts]*ts2.val_tab[i_ts])
-                if operation == 'divide':
-                    val_tab.append(ts1.val_tab[i_ts]/ts2.val_tab[i_ts])
+                if operation in OPERATIONS:
+                    val_tab.append(OPERATIONS[operation](
+                        ts1.val_tab[i_ts],
+                        ts2.val_tab[i_ts]
+                    ))
                 mjd_tab.append(ts1.mjd_tab[i_ts])
-            out_ts = TSerie(mjd=mjd_tab, val=val_tab)
+                pps_tab.append((ts1.pps_tab[i_ts]+ts1.pps_tab[i_ts])/2)
+            out_ts = TSerie(mjd=mjd_tab, val=val_tab, pps=pps_tab)
             out_mts.add_TSerie(out_ts)
         self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
     
@@ -1318,15 +1424,16 @@ class GTserie:
             ts1 = mts1.dtab[i_dtab]
             val_tab = list()
             mjd_tab = list()
+            pps_tab = list()
             for i_ts in range(0,len(ts1.val_tab)):
-                if operation == 'add':
-                    val_tab.append(ts1.val_tab[i_ts]+number)
-                if operation == 'multiply':
-                    val_tab.append(ts1.val_tab[i_ts]*number)
-                if operation == 'divide':
-                    val_tab.append(ts1.val_tab[i_ts]/number)
+                if operation in OPERATIONS:
+                    val_tab.append(OPERATIONS[operation](
+                        ts1.val_tab[i_ts],
+                        number
+                    ))
                 mjd_tab.append(ts1.mjd_tab[i_ts])
-            out_ts = TSerie(mjd=mjd_tab, val=val_tab)
+                pps_tab.append(ts1.pps_tab[i_ts])
+            out_ts = TSerie(mjd=mjd_tab, val=val_tab, pps=pps_tab)
             out_mts.add_TSerie(out_ts)
         self.append_mtserie(mts_name=mts_name_out, mts=out_mts, mjd_group='gnss_mjd')
 
@@ -1383,3 +1490,12 @@ def two_mts_equal_mjd(mts1, mts2):
         len(mts1.dtab) == len(mts2.dtab)
         and all(np.array_equal(a, b) for a, b in zip(mts1.mjd_tab(), mts2.mjd_tab()))
     )
+
+OPERATIONS = {
+    'add': lambda x, y: x + y,
+    'add_d': lambda x, y: float(D(x)+D(y)),
+    'multiply': lambda x, y: x * y,
+    'multiply_d': lambda x, y: float(D(x)*D(y)),
+    'divide': lambda x, y: x / y,
+    'divide_d': lambda x, y: float(D(x)/D(y)),
+}
