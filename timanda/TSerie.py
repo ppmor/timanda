@@ -449,8 +449,8 @@ class TSerie:
         t_mjd=list()
         t_val=list()
         for i in range(0, len(self.mjd_tab)-1):
-            delta_mjd = (self.mjd_tab[i+1]-self.mjd_tab[i])*(24*60*60)
-            f = (self.val_tab[i+1]-self.val_tab[i])/delta_mjd
+            delta_mjd_s = (self.mjd_tab[i+1]-self.mjd_tab[i])*(24*60*60)
+            f = (self.val_tab[i+1]-self.val_tab[i])/delta_mjd_s
             t_mjd.append(self.mjd_tab[i])
             t_val.append(f)
         if fill_last_point:
