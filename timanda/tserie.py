@@ -1318,6 +1318,10 @@ class GTserie:
             mjd_group=mjd_group,
             exclude=None
         )
+
+    def rm_range(self, from_mjd, to_mjd):
+        for a in self.mts_dict:
+            self.mts_dict[a].rmrange(from_mjd, to_mjd)
     
     def split_mjd_group(self, mjd_group, min_gap_s=160):
         mtss = self.get_mtss_from_mjd_group(mjd_group)
