@@ -619,6 +619,10 @@ class MTSerie:
         if show == 1:
             plt.show()
 
+    def hist(self, bins=10):
+        v = self.val_tab()
+        plt.hist(v, bins=bins)
+
     def plot_pqg_widget(self, minusmjd=0, widget=None):
         if widget is None:
             self.widget = pg.PlotWidget()
@@ -634,15 +638,16 @@ class MTSerie:
             self.widget.setTitle(self.label)
         return self.widget
 
-    def plot_allan(self, atom='88Sr'):
+    def plot_allan(self, atom='88Sr', ref_val=None, rate=1):
+        if ref_val:
+            ref = ref_val
         if atom == '88Sr':
-            fabs = 429228066418012.0
-        y = self.sew()/fabs
+            ref_val = 429228066418012.0
+        y = self.sew()/ref
         # y = y.flatten()
         print('y: ', y)
         t = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
-        r = 1
-        a = al.Dataset(data=y, rate=r, data_type="freq", taus=t)
+        a = al.Dataset(data=y, rate=rate, data_type="freq", taus=t)
         a.compute('adev')
         b = al.Plot()
         b.plot(a, errorbars=True, grid=True)
@@ -1276,7 +1281,7 @@ class GTserie:
     def plot_mts(self, mts_name):
         self.mts_dict[mts_name].plot()
 
-    def plot(self, figsize=(7, 7), mts_names=None):
+    def plot(self, fig=None, axs=None, figsize=(7, 7), mts_names=None):
         if not mts_names:
             mts_names = self.mts_dict
         fig, axs = plt.subplots(len(mts_names),1,  constrained_layout=True, sharex=True, figsize=figsize)
@@ -1286,6 +1291,7 @@ class GTserie:
             axs[i].set_title(mts_name)
         plt.tight_layout()
         plt.show()
+        return fig, axs
 
     def get_mtss_from_mjd_group(self, mjd_group, exclude=None):
         keys = [key for key, value in self.mjd_groups.items() if value == mjd_group]
