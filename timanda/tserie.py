@@ -638,21 +638,23 @@ class MTSerie:
             self.widget.setTitle(self.label)
         return self.widget
 
-    def plot_allan(self, atom='88Sr', ref_val=None, rate=1):
+    def plot_allan(self, atom=None, ref_val=None, rate=1, taus=None):
         if ref_val:
             ref = ref_val
+        else:
+            ref = 1
         if atom == '88Sr':
             ref_val = 429228066418012.0
-        y = self.sew()/ref
+        y = self.val_tab()/ref
         # y = y.flatten()
-        print('y: ', y)
-        t = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
-        a = al.Dataset(data=y, rate=rate, data_type="freq", taus=t)
+        # print('y: ', y)
+        if taus is None:
+            taus = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
+        a = al.Dataset(data=y, rate=rate, data_type="freq", taus=taus)
         a.compute('adev')
         b = al.Plot()
         b.plot(a, errorbars=True, grid=True)
         b.show()
-        pass
 
     def sew(self, grid_s=1):
         g = grid_s/(24*60*60)
