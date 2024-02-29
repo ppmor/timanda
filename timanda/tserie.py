@@ -461,8 +461,11 @@ class TSerie:
              
 
 class MTSerie:
-    def __init__(self, label='', TSerie=None, color='green', txtFileName=None):
+    def __init__(self, label='', TSerie=None, color='green', txtFileName=None,
+                 plot_label='', plot_ref_val=0):
         self.label = label
+        self.plot_label = plot_label
+        self.plot_ref_val = plot_ref_val
         self.dtab = []
         self.color = color
         if txtFileName is not None:
@@ -607,15 +610,21 @@ class MTSerie:
         raw = np.loadtxt(file_name)
         self.add_mjdf_data(raw[:, 0], raw[:, 1])
 
-    def plot(self, color='', show=1, ax=None):
+    def plot(self, color='', show=1, ax=None, zorder=1, marker=".", linestyle='none',
+             nolabels=False):
         for x in self.dtab:
             if color == '':
                 color = self.color
             if ax is None:
-                plt.plot(x.mjd_tab, x.val_tab, color=color, marker="|")
+                plt.plot(x.mjd_tab, x.val_tab-self.plot_ref_val,
+                         color=color, marker=marker,
+                         linestyle=linestyle, zorder=zorder)
             else:
-                ax.plot(x.mjd_tab, x.val_tab, color=color, marker="|")
-            plt.title(self.label)
+                ax.plot(x.mjd_tab, x.val_tab-self.plot_ref_val,
+                        color=color, marker=marker,
+                        linestyle=linestyle, zorder=zorder)
+            if not nolabels:
+                plt.ylabel(self.plot_label)
         if show == 1:
             plt.show()
 
@@ -638,21 +647,23 @@ class MTSerie:
             self.widget.setTitle(self.label)
         return self.widget
 
-    def plot_allan(self, atom='88Sr', ref_val=None, rate=1):
+    def plot_allan(self, atom=None, ref_val=None, rate=1, taus=None):
         if ref_val:
             ref = ref_val
+        else:
+            ref = 1
         if atom == '88Sr':
             ref_val = 429228066418012.0
-        y = self.sew()/ref
+        y = self.val_tab()/ref
         # y = y.flatten()
-        print('y: ', y)
-        t = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
-        a = al.Dataset(data=y, rate=rate, data_type="freq", taus=t)
+        # print('y: ', y)
+        if taus in None:
+            taus = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
+        a = al.Dataset(data=y, rate=rate, data_type="freq", taus=taus)
         a.compute('adev')
         b = al.Plot()
         b.plot(a, errorbars=True, grid=True)
         b.show()
-        pass
 
     def sew(self, grid_s=1):
         g = grid_s/(24*60*60)
@@ -1259,13 +1270,13 @@ class GTserie:
         df = import_data_to_df_rocit_gnss(path=path)
         self.append_df_as_mtseries(df, name, ['delta_t_ns'])
         
-    def append_df_as_mtseries(self, df, name, columns):
+    def append_df_as_mtseries(self, df, name, columns, mjd_name='mjd'):
         for column in columns:
             self.append_mtserie(
                 mts_name=name+'_'+column,
                 mts=MTSerie(
                     label=name+'_'+column,
-                    TSerie=TSerie(mjd=df['mjd'].to_numpy(), val=df[column].to_numpy())
+                    TSerie=TSerie(mjd=df[mjd_name].to_numpy(), val=df[column].to_numpy())
                 ),
                 mjd_group=name+'_mjd',
             )
@@ -1281,16 +1292,17 @@ class GTserie:
     def plot_mts(self, mts_name):
         self.mts_dict[mts_name].plot()
 
-    def plot(self, fig=None, axs=None, figsize=(7, 7), mts_names=None):
+    def plot(self, fig=None, axs=None, figsize=(7, 7), mts_names=None, show=1, zorder=1):
         if not mts_names:
             mts_names = self.mts_dict
         fig, axs = plt.subplots(len(mts_names),1,  constrained_layout=True, sharex=True, figsize=figsize)
         for i, mts_name in enumerate(mts_names):
-            self.mts_dict[mts_name].plot(ax=axs[i], show=0)
+            self.mts_dict[mts_name].plot(ax=axs[i], show=0, zorder=zorder)
             axs[i].grid(True)
-            axs[i].set_title(mts_name)
+            axs[i].set_ylabel(self.mts_dict[mts_name].plot_label)
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
         return fig, axs
 
     def get_mtss_from_mjd_group(self, mjd_group, exclude=None):
