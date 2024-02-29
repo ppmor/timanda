@@ -657,8 +657,8 @@ class MTSerie:
         y = self.val_tab()/ref
         # y = y.flatten()
         # print('y: ', y)
-        if taus in None:
-            taus = np.power(10, np.arange(0, int(np.log10(len(y)))+0.1, 0.1))
+        if taus is None:
+            taus = np.power(10, np.arange(0, int(np.log10(len(y)/rate))+0.1, 0.1))
         a = al.Dataset(data=y, rate=rate, data_type="freq", taus=taus)
         a.compute('adev')
         b = al.Plot()
