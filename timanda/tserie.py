@@ -924,6 +924,7 @@ class MTSerie:
         return self.dtab[-1].last_mjd()
         
     def resample(self, fun='mean', period_s=60, start_mjd=None, points_ratio=0.7):
+        self.rmemptyseries()
         first_mjd = self.first_mjd()
         first_mjd_int = np.floor(first_mjd)
         last_mjd = self.last_mjd()
@@ -932,6 +933,7 @@ class MTSerie:
         start_mjd = np.floor((first_mjd % 1)/period_mjd)*period_mjd + first_mjd_int
         stop_mjd = np.ceil((last_mjd % 1)/period_mjd)*period_mjd + last_mjd_int
         mjd_grid = np.arange(start_mjd, stop_mjd+1e-6, period_mjd)
+        print(start_mjd, stop_mjd)
         return self.resample_to_mjd_array(
             mjd_grid=mjd_grid,
             grid_period_s=period_s,
@@ -988,6 +990,7 @@ class MTSerie:
                     ts.__str__()
         out_mts = MTSerie(TSerie=ts)
         out_mts.split(min_gap_s=grid_period_s*1.7)
+        # out_mts.rmemptyseries()
         return out_mts
 
     def resample_to_mts_grid(
@@ -1350,6 +1353,16 @@ class GTserie:
     def split(self, min_gap_s):
         for mjd_group in self.mjd_groups:
             self.split_mjd_group(mjd_group=mjd_group, min_gap_s=min_gap_s)
+
+    def resample(self, fun='mean', period_s=60, start_mjd=None, points_ratio=0.1):
+        for a in self.mts_dict:
+            print('************', a)
+            self.mts_dict[a] = self.mts_dict[a].resample(
+                fun=fun,
+                period_s=period_s,
+                start_mjd=start_mjd,
+                points_ratio=points_ratio,
+            )
 
     def resample_to_mts(
         self,
