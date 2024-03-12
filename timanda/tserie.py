@@ -182,7 +182,6 @@ class TSerie:
             if self.s_tab[i+1]-self.s_tab[i] > min_gap_s:
                 tab_i.append(i+1)
         tab_i.append(len(self.s_tab)-1)
-        # print(tab_i)
         for j in range(0, len(tab_i)-1):
             out_tab.append(TSerie(
                 mjd=self.mjd_tab[tab_i[j]:tab_i[j+1]],
