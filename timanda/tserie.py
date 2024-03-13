@@ -1038,6 +1038,11 @@ class MTSerie:
         for x in self.dtab:
             x.time_diff_to_freq_diff()
 
+    def add_val_offset_from_mts(mts):
+        from_mjd = mts.dtab[0].mjd_tab[0]
+        to_mjd = mts.dtab[-1].mjd_tab[-1]
+        
+
 
 class TimePeriod:
     """
