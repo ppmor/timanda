@@ -3,6 +3,7 @@ from scipy.stats import linregress
 import decimal as dec  # TODO: remove after removing alphanorm
 from decimal import Decimal as D
 from decimal import getcontext
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,6 +11,9 @@ import pyqtgraph as pg
 import allantools as al
 from astropy.convolution import Gaussian1DKernel, convolve
 
+logging.basicConfig(
+    level=logging.INFO, format='%(levelname)s - timanda - %(message)s'
+)
 
 class TSerie:
     def __init__(self, label='', mjd=[], val=[], pps=None):
@@ -1051,9 +1055,12 @@ class MTSerie:
             return self
         it = first_tab
         ii = first_index
-        while (it<=last_tab and ii<=last_index):
-            # self.dtab[it].val_tab[ii]=mts.mjd2val(self.dtab[it].mjd_tab[ii])
-            self.dtab[it].val_tab[ii]=30
+        while (it<=last_tab or ii<=last_index):
+            logging.info(
+                f"{self.dtab[it].val_tab[ii]}, {mts.mjd2val(self.dtab[it].mjd_tab[ii])}"
+            )
+            if mts.mjd2val(self.dtab[it].mjd_tab[ii]) is not None:
+                self.dtab[it].val_tab[ii]+=mts.mjd2val(self.dtab[it].mjd_tab[ii])
             if ii==len(self.dtab[it].mjd_tab)-1:
                 ii=0
                 it+=1
