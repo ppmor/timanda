@@ -162,6 +162,9 @@ class TSerie:
                 return np.mean(self.val_tab)
         else:
             return None
+        
+    def max_val(self):
+        return np.max(self.val_tab)
 
     def rm_dc(self):
         self.val_tab = self.val_tab - self.mean
@@ -432,12 +435,16 @@ class TSerie:
         self.rm_first(stddev*5)
         self.rm_last(stddev*5)
 
-    def high_gauss_filter(self, stddev=50):
+    def high_gauss_filter(self, stddev=50, rm_dc=True):
+        if not rm_dc:
+            dc = self.mean
         g = Gaussian1DKernel(stddev=stddev)
         tmp = convolve(self.val_tab, g)
         self.val_tab = self.val_tab - tmp
         self.rm_first(stddev*5)
         self.rm_last(stddev*5)
+        if not rm_dc:
+            self.val_tab = self.val_tab + dc
 
     def toMTSerie(self):
         return MTSerie(TSerie=self)
@@ -693,7 +700,7 @@ class MTSerie:
         for i in range(0, len(self.dtab)):
             self.dtab[i] = self.dtab[i]-mean
 
-    def high_gauss_filter_each(self, stddev=50):
+    def high_gauss_filter_each(self, stddev=50, rm_dc=True):
         i = 0
         for x in self.dtab:
             i = i+1
@@ -703,7 +710,7 @@ class MTSerie:
                 # print('to short')
                 # self.dtab.remove(x)
             else:
-                x.high_gauss_filter(stddev=stddev)
+                x.high_gauss_filter(stddev=stddev, rm_dc=rm_dc)
 
     def time_shift_each(self, sec):
         for x in self.dtab:
