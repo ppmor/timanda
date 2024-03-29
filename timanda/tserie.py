@@ -468,6 +468,12 @@ class TSerie:
             t_mjd.append(self.mjd_tab[-1])
         self.mjd_tab=np.array(t_mjd)
         self.val_tab=np.array(t_val)
+    
+    def add_sin(self, amplitude=0, omega=0):
+        mjd2s = 24*60*60
+        for i,v in enumerate(self.val_tab):
+            t = (self.mjd_tab[i])*mjd2s
+            self.val_tab[i] += amplitude*np.sin(omega*t)
              
 
 class MTSerie:
@@ -1073,6 +1079,14 @@ class MTSerie:
                 it+=1
             else:
                 ii+=1
+    
+    def add_sin(self, amplitude=0, omega=0):
+        """
+        Add amplitude*sin(omega*t) to existing data
+        """
+
+        for ts in self.dtab:
+            ts.add_sin(amplitude=amplitude, omega=omega)
 
 class TimePeriod:
     """
