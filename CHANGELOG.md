@@ -2,6 +2,11 @@
 
 This document records all significant changes made to the "timanda" data analysis project. The purpose of this changelog is to inform users about new features, bug fixes, and modifications in each version.
 
+## [0.0.6] - 2024-10-06
+### Added
+- arguments `out_file_name` and `fabs` to method `plot_allan` in `tserie`
+- function `get_test_tserie`
+
 ## [0.0.5] - 2024-01-24
 ### Added
 - GTserie class

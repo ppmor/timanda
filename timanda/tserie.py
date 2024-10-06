@@ -401,7 +401,7 @@ class TSerie:
         w.setTitle(self.label+'_ADEV')
         return w
 
-    def plot_allan(self, atom='88Sr'):
+    def plot_allan(self, atom='88Sr', fabs=None, out_file_name=None):
         if atom == '88Sr':
             fabs = 429228066418012
         t = np.power(10, np.arange(1, int(np.log10(self.len_s))+0.1, 0.1))
@@ -411,7 +411,11 @@ class TSerie:
         a.compute('adev')
         b = al.Plot()
         b.plot(a, errorbars=True, grid=True)
-        b.show()
+        if out_file_name:
+            plt.savefig(out_file_name)
+            plt.close()
+        else:
+            b.show()
 
     def scatter(self):
         plt.scatter(self.mjd_tab, self.val_tab)
@@ -1582,3 +1586,9 @@ OPERATIONS = {
     'divide': lambda x, y: x / y,
     'divide_d': lambda x, y: float(D(x)/D(y)),
 }
+
+
+def get_test_tserie(fmjd = 50000, tmjd=50001, period_s=1, noise_ampl=1, mean_val=0):
+    mjd_tab = np.arange(fmjd, tmjd, 1/(24*60*60))
+    val_tab = np.random.uniform(mean_val-noise_ampl, mean_val+noise_ampl, size=mjd_tab.shape)
+    return TSerie(mjd=mjd_tab, val=val_tab)
